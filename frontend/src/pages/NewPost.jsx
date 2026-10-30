@@ -46,8 +46,9 @@ export default function NewPost() {
           <input value={form.excerpt} onChange={(e) => setForm({ ...form, excerpt: e.target.value })} />
         </div>
         <div className="field">
-          <label>Body</label>
+          <label htmlFor="body">Body</label>
           <textarea
+            id="body"
             required
             minLength={20}
             value={form.body}
