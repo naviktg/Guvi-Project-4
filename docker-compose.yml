@@ -1,0 +1,68 @@
+
+services:
+  mysql-service:
+    image: mysql:8.4
+    container_name: blogapp-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${DB_NAME:-blogdb}
+      MYSQL_USER: ${DB_USER:-bloguser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    networks:
+      - blogapp-network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+    container_name: blogapp-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      DB_HOST: mysql-service
+      DB_PORT: "3306"
+      DB_USER: ${DB_USER:-bloguser}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      DB_NAME: ${DB_NAME:-blogdb}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      CORS_ORIGIN: http://localhost:8080
+    depends_on:
+      mysql-service:
+        condition: service_healthy
+    expose:
+      - "5000"
+    networks:
+      - blogapp-network
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: blogapp-frontend
+    restart: unless-stopped
+    environment:
+      BACKEND_HOST: backend
+      BACKEND_PORT: "5000"
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - blogapp-network
+
+volumes:
+  mysql_data:
+
+networks:
+  blogapp-network:
+    driver: bridge
