@@ -1,5 +1,3 @@
-
-
 pipeline {
     agent any
 
@@ -133,6 +131,7 @@ pipeline {
                           blogapp-frontend:${BUILD_NUMBER}
 
                         echo "Backend HIGH and CRITICAL findings:"
+
                         trivy image --timeout 10m \
                           --scanners vuln \
                           --severity HIGH,CRITICAL \
@@ -141,6 +140,7 @@ pipeline {
                           blogapp-backend:${BUILD_NUMBER}
 
                         echo "Frontend HIGH and CRITICAL findings:"
+
                         trivy image --timeout 10m \
                           --scanners vuln \
                           --severity HIGH,CRITICAL \
@@ -216,23 +216,56 @@ pipeline {
                         set -eu
                         set +x
 
-                        KUBECTL="kubectl \
-                          --server=https://host.docker.internal:6443 \
-                          --insecure-skip-tls-verify=true \
-                          --token=$K8S_TOKEN \
-                          --namespace=blogapp"
+                        KCFG="$(mktemp)"
+                        chmod 600 "$KCFG"
 
-                        echo "Checking Kubernetes deployment permission..."
+                        trap 'rm -f "$KCFG"' EXIT
 
-                        $KUBECTL auth can-i patch deployments
+                        cat > "$KCFG" <<EOF
+apiVersion: v1
+kind: Config
+clusters:
+- name: docker-desktop
+  cluster:
+    server: https://host.docker.internal:6443
+    insecure-skip-tls-verify: true
+users:
+- name: jenkins-deployer
+  user:
+    token: ${K8S_TOKEN}
+contexts:
+- name: jenkins-deployer
+  context:
+    cluster: docker-desktop
+    user: jenkins-deployer
+    namespace: blogapp
+current-context: jenkins-deployer
+EOF
+
+                        export KUBECONFIG="$KCFG"
+
+                        echo "Checking Kubernetes connection..."
+
+                        kubectl version
+
+                        echo "Checking deployment permission..."
+
+                        PERMISSION="$(kubectl auth can-i patch deployments -n blogapp)"
+
+                        echo "Deployment permission: $PERMISSION"
+
+                        if [ "$PERMISSION" != "yes" ]; then
+                            echo "ERROR: Jenkins does not have deployment permission."
+                            exit 1
+                        fi
 
                         echo "Checking Kubernetes deployments..."
 
-                        $KUBECTL get deployments
+                        kubectl get deployments -n blogapp
 
                         echo "Checking Kubernetes pods..."
 
-                        $KUBECTL get pods
+                        kubectl get pods -n blogapp
 
                         echo "Kubernetes connection successful!"
                     '''
