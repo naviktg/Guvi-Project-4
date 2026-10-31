@@ -1,4 +1,5 @@
 
+
 pipeline {
     agent any
 
@@ -202,11 +203,47 @@ pipeline {
                 }
             }
         }
+
+        stage('Kubernetes Connection Test') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'kubernetes-token',
+                        variable: 'K8S_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+                        set +x
+
+                        KUBECTL="kubectl \
+                          --server=https://host.docker.internal:6443 \
+                          --insecure-skip-tls-verify=true \
+                          --token=$K8S_TOKEN \
+                          --namespace=blogapp"
+
+                        echo "Checking Kubernetes deployment permission..."
+
+                        $KUBECTL auth can-i patch deployments
+
+                        echo "Checking Kubernetes deployments..."
+
+                        $KUBECTL get deployments
+
+                        echo "Checking Kubernetes pods..."
+
+                        $KUBECTL get pods
+
+                        echo "Kubernetes connection successful!"
+                    '''
+                }
+            }
+        }
     }
 
     post {
         success {
-            echo 'Build, tests, SonarQube Quality Gate, Docker image builds, Trivy scans and Docker Hub pushes completed successfully!'
+            echo 'Build, tests, SonarQube Quality Gate, Docker image builds, Trivy scans, Docker Hub pushes and Kubernetes connection test completed successfully!'
         }
 
         failure {
