@@ -1,4 +1,5 @@
 
+```groovy
 pipeline {
     agent any
 
@@ -61,11 +62,19 @@ pipeline {
                 }
             }
         }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
     }
 
     post {
         success {
-            echo 'Build, tests and SonarQube analysis completed successfully!'
+            echo 'Build, tests and SonarQube Quality Gate completed successfully!'
         }
 
         failure {
@@ -73,3 +82,4 @@ pipeline {
         }
     }
 }
+```
