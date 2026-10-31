@@ -81,11 +81,82 @@ pipeline {
                 }
             }
         }
+
+        stage('Docker Image Build') {
+            steps {
+                withEnv([
+                    'DOCKER_HOST=tcp://docker:2376',
+                    'DOCKER_TLS_VERIFY=1',
+                    'DOCKER_CERT_PATH=/var/jenkins_home/.docker'
+                ]) {
+                    sh '''
+                        set -eu
+
+                        docker build --pull \
+                          -t blogapp-backend:${BUILD_NUMBER} \
+                          -t blogapp-backend:latest \
+                          ./backend
+
+                        docker build --pull \
+                          -t blogapp-frontend:${BUILD_NUMBER} \
+                          -t blogapp-frontend:latest \
+                          ./frontend
+
+                        docker image ls
+                    '''
+                }
+            }
+        }
+
+        stage('Trivy Vulnerability Scan') {
+            steps {
+                withEnv([
+                    'DOCKER_HOST=tcp://docker:2376',
+                    'DOCKER_TLS_VERIFY=1',
+                    'DOCKER_CERT_PATH=/var/jenkins_home/.docker'
+                ]) {
+                    sh '''
+                        set -eu
+
+                        trivy image --timeout 10m \
+                          --scanners vuln \
+                          --format json \
+                          --output trivy-backend-report.json \
+                          blogapp-backend:${BUILD_NUMBER}
+
+                        trivy image --timeout 10m \
+                          --scanners vuln \
+                          --format json \
+                          --output trivy-frontend-report.json \
+                          blogapp-frontend:${BUILD_NUMBER}
+
+                        echo "Backend HIGH and CRITICAL findings:"
+                        trivy image --timeout 10m \
+                          --scanners vuln \
+                          --severity HIGH,CRITICAL \
+                          --ignore-unfixed \
+                          --exit-code 0 \
+                          blogapp-backend:${BUILD_NUMBER}
+
+                        echo "Frontend HIGH and CRITICAL findings:"
+                        trivy image --timeout 10m \
+                          --scanners vuln \
+                          --severity HIGH,CRITICAL \
+                          --ignore-unfixed \
+                          --exit-code 0 \
+                          blogapp-frontend:${BUILD_NUMBER}
+                    '''
+                }
+
+                archiveArtifacts artifacts: 'trivy-*-report.json',
+                                 fingerprint: true
+            }
+        }
     }
 
     post {
         success {
-            echo 'Build, tests, SonarQube Quality Gate and Docker connection completed successfully!'
+            echo 'Build, tests, SonarQube Quality Gate, Docker image builds and Trivy scans completed successfully!'
         }
 
         failure {
