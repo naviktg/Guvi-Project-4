@@ -68,11 +68,24 @@ pipeline {
                 }
             }
         }
+
+        stage('Docker Connection Test') {
+            steps {
+                withEnv([
+                    'DOCKER_HOST=tcp://docker:2376',
+                    'DOCKER_TLS_VERIFY=1',
+                    'DOCKER_CERT_PATH=/var/jenkins_home/.docker'
+                ]) {
+                    sh 'docker version'
+                    sh 'docker info'
+                }
+            }
+        }
     }
 
     post {
         success {
-            echo 'Build, tests and SonarQube Quality Gate completed successfully!'
+            echo 'Build, tests, SonarQube Quality Gate and Docker connection completed successfully!'
         }
 
         failure {
