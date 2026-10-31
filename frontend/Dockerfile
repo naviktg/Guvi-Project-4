@@ -13,15 +13,26 @@ RUN npm run build
 # Stage 2: Unprivileged Nginx production server
 FROM nginxinc/nginx-unprivileged:alpine
 
+# Upgrade Alpine packages to patched versions
+USER root
+RUN apk upgrade --no-cache
+
+# Run Nginx as non-root user
+USER 101
+
+# Copy production frontend build
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# Nginx reverse proxy configuration
 COPY default.conf.template /etc/nginx/templates/default.conf.template
 
+# Backend configuration
 ENV BACKEND_HOST=backend
 ENV BACKEND_PORT=5000
 ENV NGINX_ENVSUBST_FILTER="^(BACKEND_HOST|BACKEND_PORT)$"
 
 EXPOSE 8080
 
+# Container health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -q --spider http://127.0.0.1:8080/ || exit 1
