@@ -1,3 +1,4 @@
+
 # Stage 1: Install production dependencies
 FROM node:22-alpine AS dependencies
 
