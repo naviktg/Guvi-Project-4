@@ -154,82 +154,49 @@ pipeline {
             }
         }
 
-        stage('Push Images to Amazon ECR') {
+        stage('Docker Hub Push') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'aws-ecr-jenkins',
-                        usernameVariable: 'AWS_ACCESS_KEY_ID',
-                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-                    )
+                withEnv([
+                    'DOCKER_HOST=tcp://docker:2376',
+                    'DOCKER_TLS_VERIFY=1',
+                    'DOCKER_CERT_PATH=/var/jenkins_home/.docker'
                 ]) {
-                    withEnv([
-                        'AWS_DEFAULT_REGION=ap-south-1',
-                        'AWS_REGION=ap-south-1',
-                        'AWS_PAGER=',
-                        'ECR_REGISTRY=471443767061.dkr.ecr.ap-south-1.amazonaws.com',
-                        'DOCKER_HOST=tcp://docker:2376',
-                        'DOCKER_TLS_VERIFY=1',
-                        'DOCKER_CERT_PATH=/var/jenkins_home/.docker'
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'dockerhub-creds',
+                            usernameVariable: 'DOCKERHUB_USERNAME',
+                            passwordVariable: 'DOCKERHUB_TOKEN'
+                        )
                     ]) {
                         sh '''
                             set -eu
-                            set +x
 
-                            export DOCKER_CONFIG="$(mktemp -d)"
-
-                            cleanup() {
-                                docker logout "$ECR_REGISTRY" >/dev/null 2>&1 || true
-                                rm -rf "$DOCKER_CONFIG"
-                            }
-
-                            trap cleanup EXIT
-
-                            echo "Authenticating with Amazon ECR..."
-
-                            aws ecr get-login-password \
-                              --region "$AWS_DEFAULT_REGION" |
+                            printf '%s' "$DOCKERHUB_TOKEN" | \
                               docker login \
-                                --username AWS \
-                                --password-stdin "$ECR_REGISTRY"
+                              --username "$DOCKERHUB_USERNAME" \
+                              --password-stdin
 
-                            echo "Tagging Backend image..."
+                            trap 'docker logout >/dev/null 2>&1 || true' EXIT
 
-                            docker tag \
-                              "blogapp-backend:${BUILD_NUMBER}" \
-                              "$ECR_REGISTRY/blogapp-backend:${BUILD_NUMBER}"
+                            docker tag blogapp-backend:${BUILD_NUMBER} \
+                              "$DOCKERHUB_USERNAME/blogapp-backend:${BUILD_NUMBER}"
 
-                            docker tag \
-                              "blogapp-backend:${BUILD_NUMBER}" \
-                              "$ECR_REGISTRY/blogapp-backend:latest"
+                            docker tag blogapp-backend:${BUILD_NUMBER} \
+                              "$DOCKERHUB_USERNAME/blogapp-backend:latest"
 
-                            echo "Tagging Frontend image..."
+                            docker tag blogapp-frontend:${BUILD_NUMBER} \
+                              "$DOCKERHUB_USERNAME/blogapp-frontend:${BUILD_NUMBER}"
 
-                            docker tag \
-                              "blogapp-frontend:${BUILD_NUMBER}" \
-                              "$ECR_REGISTRY/blogapp-frontend:${BUILD_NUMBER}"
+                            docker tag blogapp-frontend:${BUILD_NUMBER} \
+                              "$DOCKERHUB_USERNAME/blogapp-frontend:latest"
 
-                            docker tag \
-                              "blogapp-frontend:${BUILD_NUMBER}" \
-                              "$ECR_REGISTRY/blogapp-frontend:latest"
+                            docker push "$DOCKERHUB_USERNAME/blogapp-backend:${BUILD_NUMBER}"
+                            docker push "$DOCKERHUB_USERNAME/blogapp-backend:latest"
 
-                            echo "Pushing Backend images..."
+                            docker push "$DOCKERHUB_USERNAME/blogapp-frontend:${BUILD_NUMBER}"
+                            docker push "$DOCKERHUB_USERNAME/blogapp-frontend:latest"
 
-                            docker push \
-                              "$ECR_REGISTRY/blogapp-backend:${BUILD_NUMBER}"
-
-                            docker push \
-                              "$ECR_REGISTRY/blogapp-backend:latest"
-
-                            echo "Pushing Frontend images..."
-
-                            docker push \
-                              "$ECR_REGISTRY/blogapp-frontend:${BUILD_NUMBER}"
-
-                            docker push \
-                              "$ECR_REGISTRY/blogapp-frontend:latest"
-
-                            echo "Both Docker images pushed successfully to Amazon ECR!"
+                            echo "Both images pushed successfully to Docker Hub!"
                         '''
                     }
                 }
@@ -239,7 +206,7 @@ pipeline {
 
     post {
         success {
-            echo 'Build, tests, SonarQube Quality Gate, Docker builds, Trivy scans and Amazon ECR image pushes completed successfully!'
+            echo 'Build, tests, SonarQube Quality Gate, Docker image builds, Trivy scans and Docker Hub pushes completed successfully!'
         }
 
         failure {
