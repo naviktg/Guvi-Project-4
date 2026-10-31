@@ -4,12 +4,21 @@ module.exports = {
     browser: true,
     es2022: true
   },
-  extends: ["eslint:recommended"],
+  extends: [
+    "eslint:recommended",
+    "plugin:react/recommended"
+  ],
+  plugins: ["react-hooks"],
   parserOptions: {
     ecmaVersion: "latest",
     sourceType: "module",
     ecmaFeatures: {
       jsx: true
+    }
+  },
+  settings: {
+    react: {
+      version: "detect"
     }
   },
   rules: {
@@ -20,6 +29,10 @@ module.exports = {
         varsIgnorePattern: "^_",
         ignoreRestSiblings: true
       }
-    ]
+    ],
+    "react/prop-types": "off",
+    "react/react-in-jsx-scope": "off",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn"
   }
 };
