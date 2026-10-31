@@ -1,3 +1,4 @@
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,8 +16,8 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: blogapp-frontend:latest
-          imagePullPolicy: IfNotPresent
+          image: navikaran/blogapp-frontend:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:

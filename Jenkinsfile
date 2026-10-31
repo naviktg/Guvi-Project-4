@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -133,7 +134,6 @@ pipeline {
                         echo "Backend HIGH and CRITICAL findings:"
 
                         trivy image --timeout 10m \
-                          --scanners vuln \
                           --severity HIGH,CRITICAL \
                           --ignore-unfixed \
                           --exit-code 0 \
@@ -142,7 +142,6 @@ pipeline {
                         echo "Frontend HIGH and CRITICAL findings:"
 
                         trivy image --timeout 10m \
-                          --scanners vuln \
                           --severity HIGH,CRITICAL \
                           --ignore-unfixed \
                           --exit-code 0 \
@@ -218,7 +217,6 @@ pipeline {
 
                         KCFG="$(mktemp)"
                         chmod 600 "$KCFG"
-
                         trap 'rm -f "$KCFG"' EXIT
 
                         cat > "$KCFG" <<EOF
@@ -245,13 +243,10 @@ EOF
                         export KUBECONFIG="$KCFG"
 
                         echo "Checking Kubernetes connection..."
-
                         kubectl version
 
                         echo "Checking deployment permission..."
-
                         PERMISSION="$(kubectl auth can-i patch deployments -n blogapp)"
-
                         echo "Deployment permission: $PERMISSION"
 
                         if [ "$PERMISSION" != "yes" ]; then
@@ -259,15 +254,93 @@ EOF
                             exit 1
                         fi
 
-                        echo "Checking Kubernetes deployments..."
+                        echo "Checking service permission..."
+                        SERVICE_PERMISSION="$(kubectl auth can-i patch services -n blogapp)"
 
+                        if [ "$SERVICE_PERMISSION" != "yes" ]; then
+                            echo "ERROR: Jenkins does not have service permission."
+                            exit 1
+                        fi
+
+                        echo "Checking Kubernetes deployments..."
                         kubectl get deployments -n blogapp
 
                         echo "Checking Kubernetes pods..."
-
                         kubectl get pods -n blogapp
 
                         echo "Kubernetes connection successful!"
+                    '''
+                }
+            }
+        }
+
+        stage('Kubernetes Deployment') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'kubernetes-token',
+                        variable: 'K8S_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+                        set +x
+
+                        KCFG="$(mktemp)"
+                        chmod 600 "$KCFG"
+                        trap 'rm -f "$KCFG"' EXIT
+
+                        cat > "$KCFG" <<EOF
+apiVersion: v1
+kind: Config
+clusters:
+- name: docker-desktop
+  cluster:
+    server: https://host.docker.internal:6443
+    insecure-skip-tls-verify: true
+users:
+- name: jenkins-deployer
+  user:
+    token: ${K8S_TOKEN}
+contexts:
+- name: jenkins-deployer
+  context:
+    cluster: docker-desktop
+    user: jenkins-deployer
+    namespace: blogapp
+current-context: jenkins-deployer
+EOF
+
+                        export KUBECONFIG="$KCFG"
+
+                        echo "Applying backend and frontend Kubernetes manifests..."
+
+                        kubectl apply -f k8s/backend.yaml
+                        kubectl apply -f k8s/frontend.yaml
+
+                        echo "Waiting for backend rollout..."
+
+                        kubectl rollout status deployment/backend \
+                          -n blogapp --timeout=180s
+
+                        echo "Waiting for frontend rollout..."
+
+                        kubectl rollout status deployment/frontend \
+                          -n blogapp --timeout=180s
+
+                        echo "Checking final deployments..."
+
+                        kubectl get deployments -n blogapp
+
+                        echo "Checking final pods..."
+
+                        kubectl get pods -n blogapp
+
+                        echo "Checking services..."
+
+                        kubectl get services -n blogapp
+
+                        echo "Kubernetes deployment completed successfully!"
                     '''
                 }
             }
@@ -276,7 +349,7 @@ EOF
 
     post {
         success {
-            echo 'Build, tests, SonarQube Quality Gate, Docker image builds, Trivy scans, Docker Hub pushes and Kubernetes connection test completed successfully!'
+            echo 'Build, tests, SonarQube Quality Gate, Docker builds, Trivy scans, Docker Hub pushes and Kubernetes deployments completed successfully!'
         }
 
         failure {

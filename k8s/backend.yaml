@@ -16,8 +16,8 @@ spec:
     spec:
       containers:
         - name: backend
-          image: blogapp-backend:latest
-          imagePullPolicy: IfNotPresent
+          image: navikaran/blogapp-backend:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 5000
           env:
