@@ -61,6 +61,9 @@ spec:
           volumeMounts:
             - name: mysql-storage
               mountPath: /var/lib/mysql
+            - name: mysql-init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
           readinessProbe:
             exec:
               command:
@@ -79,5 +82,10 @@ spec:
             periodSeconds: 20
       volumes:
         - name: mysql-storage
+          persistentVolumeClaim:
+            claimName: mysql-pvc
+        - name: mysql-init
+          configMap:
+            name: mysql-init
           persistentVolumeClaim:
             claimName: mysql-pvc
